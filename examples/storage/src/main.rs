@@ -83,7 +83,7 @@ fn Storage() -> Element {
     let mut count_session = use_singleton_persistent(|| 0);
     let mut count_local = use_synced_storage::<LocalStorage, i32>("synced".to_string(), || 0);
 
-    let mut count_local_human = use_synced_storage::<HumanReadableStorage<LocalStorage>, i32>(
+    let mut count_local_human = use_synced_storage::<HumanReadableStorage<i32, LocalStorage>, i32>(
         "synced_human".to_string(),
         || 0,
     );
@@ -120,21 +120,23 @@ fn Storage() -> Element {
 }
 
 // Define a "human readable" storage format which is pretty printed JSON instead of a compressed binary format.
-type HumanReadableStorage<Storage> = LayeredStorage<Storage, HumanReadableEncoding>;
+type HumanReadableStorage<T, Storage> = LayeredStorage<T, Storage, HumanReadableEncoding>;
 
 #[derive(Clone)]
 struct HumanReadableEncoding;
 
-impl StorageEncoder for HumanReadableEncoding {
+impl<T: DeserializeOwned + Serialize + Clone + 'static> StorageEncoder<T>
+    for HumanReadableEncoding
+{
     type Value = String;
 
-    fn deserialize<T: DeserializeOwned + Clone + 'static>(loaded: &Self::Value) -> T {
+    fn deserialize(loaded: &Self::Value) -> T {
         let parsed: Result<T, serde_json::Error> = serde_json::from_str(loaded);
         // This design probably needs an error handling policy better than panic.
         parsed.unwrap()
     }
 
-    fn serialize<T: Serialize + Send + Sync + Clone + 'static>(value: &T) -> Self::Value {
+    fn serialize(value: &T) -> Self::Value {
         serde_json::to_string_pretty(value).unwrap()
     }
 }

@@ -63,15 +63,15 @@ pub use client_storage::{set_dir_name, set_directory};
 /// use dioxus_signals::Signal;
 ///
 /// // This hook can be used with any storage backing without multiple versions of the hook
-/// fn use_user_id<S>() -> Signal<usize> where S: StorageBacking<Key=&'static str> {
+/// fn use_user_id<S>() -> Signal<usize> where S: StorageBacking<T><Key=&'static str> {
 ///     use_storage::<S, _>("user-id", || 123)
 /// }
 /// ```
 pub fn use_storage<S, T>(key: S::Key, init: impl FnOnce() -> T) -> Signal<T>
 where
-    S: StorageBacking,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    S: Clone + StorageBacking<T>,
     S::Key: Clone,
+    T: Clone + Send + Sync + PartialEq + 'static,
 {
     let mut init = Some(init);
     let storage = use_hook(|| new_storage::<S, T>(key, || init.take().unwrap()()));
@@ -114,15 +114,15 @@ impl StorageMode {
 /// use dioxus_signals::Signal;
 ///
 /// // This hook can be used with any storage backing without multiple versions of the hook
-/// fn user_id<S>() -> Signal<usize> where S: StorageBacking<Key=&'static str> {
+/// fn user_id<S>() -> Signal<usize> where S: StorageBacking<T><Key=&'static str> {
 ///     new_storage::<S, _>("user-id", || 123)
 /// }
 /// ```
 pub fn new_storage<S, T>(key: S::Key, init: impl FnOnce() -> T) -> Signal<T>
 where
-    S: StorageBacking,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    S: Clone + StorageBacking<T>,
     S::Key: Clone,
+    T: Clone + Send + Sync + PartialEq + 'static,
 {
     let mode = StorageMode::current();
 
@@ -145,9 +145,9 @@ where
 /// The changes to the state will be persisted to storage and all other app sessions will be notified of the change to update their local state.
 pub fn use_synced_storage<S, T>(key: S::Key, init: impl FnOnce() -> T) -> Signal<T>
 where
-    S: StorageBacking + StorageSubscriber<S>,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    S: Clone + StorageBacking<T> + StorageSubscriber<T, S>,
     S::Key: Clone,
+    T: Clone + Send + Sync + PartialEq + 'static,
 {
     let mut init = Some(init);
     let storage = use_hook(|| new_synced_storage::<S, T>(key, || init.take().unwrap()()));
@@ -161,9 +161,9 @@ where
 /// The changes to the state will be persisted to storage and all other app sessions will be notified of the change to update their local state.
 pub fn new_synced_storage<S, T>(key: S::Key, init: impl FnOnce() -> T) -> Signal<T>
 where
-    S: StorageBacking + StorageSubscriber<S>,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    S: Clone + StorageBacking<T> + StorageSubscriber<T, S>,
     S::Key: Clone,
+    T: Clone + Send + Sync + PartialEq + 'static,
 {
     let signal = {
         let mode = StorageMode::current();
@@ -187,9 +187,9 @@ where
 /// A hook that creates a StorageEntry with the latest value from storage or the init value if it doesn't exist.
 pub fn use_storage_entry<S, T>(key: S::Key, init: impl FnOnce() -> T) -> StorageEntry<S, T>
 where
-    S: StorageBacking,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    S: StorageBacking<T>,
     S::Key: Clone,
+    T: Clone + Send + Sync + PartialEq + 'static,
 {
     let mut init = Some(init);
     let signal = use_hook(|| new_storage_entry::<S, T>(key, || init.take().unwrap()()));
@@ -203,9 +203,9 @@ pub fn use_synced_storage_entry<S, T>(
     init: impl FnOnce() -> T,
 ) -> SyncedStorageEntry<S, T>
 where
-    S: StorageBacking + StorageSubscriber<S>,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    S: StorageBacking<T> + StorageSubscriber<T, S>,
     S::Key: Clone,
+    T: Clone + Send + Sync + PartialEq + 'static,
 {
     let mut init = Some(init);
     let signal = use_hook(|| new_synced_storage_entry::<S, T>(key, || init.take().unwrap()()));
@@ -216,11 +216,10 @@ where
 /// Returns a StorageEntry with the latest value from storage or the init value if it doesn't exist.
 pub fn new_storage_entry<S, T>(key: S::Key, init: impl FnOnce() -> T) -> StorageEntry<S, T>
 where
-    S: StorageBacking,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
-    S::Key: Clone,
+    S: StorageBacking<T>,
+    T: Send + Sync + 'static,
 {
-    let data = get_from_storage::<S, T>(key.clone(), init);
+    let data = get_from_storage::<S, T>(&key, init);
     StorageEntry::new(key, data)
 }
 
@@ -232,20 +231,16 @@ pub fn new_synced_storage_entry<S, T>(
     init: impl FnOnce() -> T,
 ) -> SyncedStorageEntry<S, T>
 where
-    S: StorageBacking + StorageSubscriber<S>,
-    T: Serialize + DeserializeOwned + Clone + PartialEq + Send + Sync + 'static,
-    S::Key: Clone,
+    S: StorageBacking<T> + StorageSubscriber<T, S>,
+    T: Clone + PartialEq + Send + Sync + 'static,
 {
-    let data = get_from_storage::<S, T>(key.clone(), init);
+    let data = get_from_storage::<S, T>(&key, init);
     SyncedStorageEntry::new(key, data)
 }
 
 /// Returns a value from storage or the init value if it doesn't exist.
-pub fn get_from_storage<
-    S: StorageBacking,
-    T: Serialize + DeserializeOwned + Send + Sync + Clone + 'static,
->(
-    key: S::Key,
+pub fn get_from_storage<S: StorageBacking<T>, T: Send + Sync + 'static>(
+    key: &S::Key,
     init: impl FnOnce() -> T,
 ) -> T {
     S::get(&key).unwrap_or_else(|| {
@@ -256,9 +251,7 @@ pub fn get_from_storage<
 }
 
 /// A trait for common functionality between StorageEntry and SyncedStorageEntry
-pub trait StorageEntryTrait<S: StorageBacking, T: PartialEq + Clone + 'static>:
-    Clone + 'static
-{
+pub trait StorageEntryTrait<S: StorageBacking<T>, T: 'static>: 'static {
     /// Saves the current state to storage
     fn save(&self);
 
@@ -274,8 +267,9 @@ pub trait StorageEntryTrait<S: StorageBacking, T: PartialEq + Clone + 'static>:
     /// Creates a hook that will save the state to storage when the state changes
     fn save_to_storage_on_change(&self)
     where
-        S: StorageBacking,
-        T: Serialize + DeserializeOwned + Clone + PartialEq + 'static,
+        Self: Clone,
+        S: StorageBacking<T>,
+        T: Clone + PartialEq + 'static,
     {
         let entry_clone = self.clone();
         let old = RefCell::new(None);
@@ -299,24 +293,33 @@ pub trait StorageEntryTrait<S: StorageBacking, T: PartialEq + Clone + 'static>:
 }
 
 /// A wrapper around StorageEntry that provides a channel to subscribe to updates to the underlying storage.
-#[derive(Clone)]
-pub struct SyncedStorageEntry<
-    S: StorageBacking + StorageSubscriber<S>,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
-> {
+pub struct SyncedStorageEntry<S: StorageBacking<T>, T: 'static> {
     /// The underlying StorageEntry that is used to store the data and track the state
     pub(crate) entry: StorageEntry<S, T>,
     /// The channel to subscribe to updates to the underlying storage
     pub(crate) channel: Receiver<StorageChannelPayload>,
 }
 
+impl<S, T> Clone for SyncedStorageEntry<S, T>
+where
+    S: StorageBacking<T> + StorageSubscriber<T, S>,
+    S::Key: Clone,
+    T: 'static,
+{
+    fn clone(&self) -> Self {
+        Self {
+            entry: self.entry.clone(),
+            channel: self.channel.clone(),
+        }
+    }
+}
+
 impl<S, T> SyncedStorageEntry<S, T>
 where
-    S: StorageBacking + StorageSubscriber<S>,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    S: StorageBacking<T> + StorageSubscriber<T, S>,
 {
     pub fn new(key: S::Key, data: T) -> Self {
-        let channel = S::subscribe::<T>(&key);
+        let channel = S::subscribe(&key);
         Self {
             entry: StorageEntry::new(key, data),
             channel,
@@ -329,7 +332,10 @@ where
     }
 
     /// Creates a hook that will update the state when the underlying storage changes
-    pub fn subscribe_to_storage(&self) {
+    pub fn subscribe_to_storage(&self)
+    where
+        T: Clone + Send + Sync + PartialEq + 'static,
+    {
         let storage_entry_signal = *self.data();
         let channel = self.channel.clone();
         spawn(async move {
@@ -352,8 +358,8 @@ where
 
 impl<S, T> StorageEntryTrait<S, T> for SyncedStorageEntry<S, T>
 where
-    S: StorageBacking + StorageSubscriber<S>,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    S: StorageBacking<T> + StorageSubscriber<T, S>,
+    T: Send + Sync + PartialEq + 'static,
 {
     fn save(&self) {
         //  We want to save in the following conditions
@@ -381,22 +387,30 @@ where
 }
 
 /// A storage entry that can be used to store data across application reloads. It optionally provides a channel to subscribe to updates to the underlying storage.
-#[derive(Clone)]
-pub struct StorageEntry<
-    S: StorageBacking,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
-> {
+pub struct StorageEntry<S: StorageBacking<T>, T: 'static> {
     /// The key used to store the data in storage
     pub(crate) key: S::Key,
     /// A signal that can be used to read and modify the state
     pub(crate) data: Signal<T>,
 }
 
+impl<S, T> Clone for StorageEntry<S, T>
+where
+    S: StorageBacking<T>,
+    T: 'static,
+    S::Key: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            data: self.data.clone(),
+        }
+    }
+}
+
 impl<S, T> StorageEntry<S, T>
 where
-    S: StorageBacking,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
-    S::Key: Clone,
+    S: StorageBacking<T>,
 {
     /// Creates a new StorageEntry
     pub fn new(key: S::Key, data: T) -> Self {
@@ -412,15 +426,17 @@ where
 
 impl<S, T> StorageEntryTrait<S, T> for StorageEntry<S, T>
 where
-    S: StorageBacking,
-    T: Serialize + DeserializeOwned + Clone + PartialEq + Send + Sync + 'static,
+    S: StorageBacking<T>,
+    T: PartialEq + Send + Sync + 'static,
 {
     fn save(&self) {
-        S::set(self.key.clone(), &*self.data.read());
+        S::set(&self.key, &*self.data.read());
     }
 
     fn update(&mut self) {
-        self.data = S::get(&self.key).unwrap_or(self.data);
+        if let Some(value) = S::get(&self.key) {
+            *self.data.write() = value;
+        }
     }
 
     fn key(&self) -> &S::Key {
@@ -432,9 +448,7 @@ where
     }
 }
 
-impl<S: StorageBacking, T: Serialize + DeserializeOwned + Clone + Send + Sync> Deref
-    for StorageEntry<S, T>
-{
+impl<S: StorageBacking<T>, T: Send + Sync> Deref for StorageEntry<S, T> {
     type Target = Signal<T>;
 
     fn deref(&self) -> &Signal<T> {
@@ -442,15 +456,13 @@ impl<S: StorageBacking, T: Serialize + DeserializeOwned + Clone + Send + Sync> D
     }
 }
 
-impl<S: StorageBacking, T: Serialize + DeserializeOwned + Clone + Send + Sync> DerefMut
-    for StorageEntry<S, T>
-{
+impl<S: StorageBacking<T>, T: Send + Sync> DerefMut for StorageEntry<S, T> {
     fn deref_mut(&mut self) -> &mut Signal<T> {
         &mut self.data
     }
 }
 
-impl<S: StorageBacking, T: Display + Serialize + DeserializeOwned + Clone + Send + Sync> Display
+impl<S: StorageBacking<T>, T: Display + Serialize + DeserializeOwned + Send + Sync> Display
     for StorageEntry<S, T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -458,7 +470,7 @@ impl<S: StorageBacking, T: Display + Serialize + DeserializeOwned + Clone + Send
     }
 }
 
-impl<S: StorageBacking, T: Debug + Serialize + DeserializeOwned + Clone + Send + Sync> Debug
+impl<S: StorageBacking<T>, T: Debug + Serialize + DeserializeOwned + Send + Sync> Debug
     for StorageEntry<S, T>
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -467,89 +479,90 @@ impl<S: StorageBacking, T: Debug + Serialize + DeserializeOwned + Clone + Send +
 }
 
 /// A trait for a storage backing
-pub trait StorageBacking: Clone + 'static {
+pub trait StorageBacking<T>: 'static {
     /// The key type used to store data in storage
-    type Key: PartialEq + Clone + Debug + Send + Sync + 'static;
+    type Key: PartialEq + Debug + Send + Sync + 'static;
     /// Gets a value from storage for the given key
-    fn get<T: DeserializeOwned + Clone + 'static>(key: &Self::Key) -> Option<T>;
+    fn get(key: &Self::Key) -> Option<T>;
     /// Sets a value in storage for the given key
-    fn set<T: Serialize + Send + Sync + Clone + 'static>(key: Self::Key, value: &T);
+    fn set(key: &Self::Key, value: &T);
 }
 
 /// A trait for the persistence portion of StorageBacking.
-pub trait StoragePersistence: Clone + 'static {
+pub trait StoragePersistence: 'static {
     /// The key type used to store data in storage
-    type Key: PartialEq + Clone + Debug + Send + Sync + 'static;
+    type Key: PartialEq + Debug + Send + Sync + 'static;
     /// The type of value which can be stored.
     type Value;
     /// Gets a value from storage for the given key
     fn load(key: &Self::Key) -> Self::Value;
     /// Sets a value in storage for the given key
-    fn store(key: Self::Key, value: &Self::Value);
+    fn store(key: &Self::Key, value: &Self::Value);
 }
 
 /// New trait which can be implemented to define a data format for storage.
-pub trait StorageEncoder: Clone + 'static {
+pub trait StorageEncoder<T>: 'static {
     /// The type of value which can be stored.
     type Value;
-    fn deserialize<T: DeserializeOwned + Clone + 'static>(loaded: &Self::Value) -> T;
-    fn serialize<T: Serialize + Send + Sync + Clone + 'static>(value: &T) -> Self::Value;
+    fn deserialize(loaded: &Self::Value) -> T;
+    fn serialize(value: &T) -> Self::Value;
 }
 
 /// A way to create a StorageEncoder out of the two layers.
 ///
 /// I'm not sure if this is the best way to abstract that.
 #[derive(Clone)]
-pub struct LayeredStorage<Persistence: StoragePersistence, Encoder: StorageEncoder> {
+pub struct LayeredStorage<T, Persistence: StoragePersistence, Encoder: StorageEncoder<T>> {
     persistence: PhantomData<Persistence>,
     encoder: PhantomData<Encoder>,
+    value: PhantomData<T>,
 }
 
 /// StorageBacking for LayeredStorage.
-impl<Value, P: StoragePersistence<Value = Option<Value>>, E: StorageEncoder<Value = Value>>
-    StorageBacking for LayeredStorage<P, E>
+impl<
+    T: 'static,
+    Value,
+    P: StoragePersistence<Value = Option<Value>>,
+    E: StorageEncoder<T, Value = Value>,
+> StorageBacking<T> for LayeredStorage<T, P, E>
 {
     type Key = P::Key;
 
-    fn get<T: DeserializeOwned + Clone + 'static>(key: &Self::Key) -> Option<T> {
+    fn get(key: &Self::Key) -> Option<T> {
         let loaded = P::load(key);
-        match loaded {
-            Some(t) => E::deserialize(&t),
-            None => None,
-        }
+        loaded.as_ref().map(E::deserialize)
     }
 
-    fn set<T: Serialize + Send + Sync + Clone + 'static>(key: Self::Key, value: &T) {
+    fn set(key: &Self::Key, value: &T) {
         P::store(key, &Some(E::serialize(value)));
     }
 }
 
 impl<
+    T: 'static,
     Value,
     Key,
     P: StoragePersistence<Value = Option<Value>, Key = Key>
-        + StorageSubscriber<P>
-        + StorageBacking<Key = Key>,
-    E: StorageEncoder<Value = Value>,
-> StorageSubscriber<LayeredStorage<P, E>> for LayeredStorage<P, E>
+        + StorageSubscriber<T, P>
+        + StorageBacking<T, Key = Key>,
+    E: StorageEncoder<T, Value = Value>,
+> StorageSubscriber<T, LayeredStorage<T, P, E>> for LayeredStorage<T, P, E>
 {
-    fn subscribe<T: DeserializeOwned + Send + Sync + Clone + 'static>(
-        key: &<LayeredStorage<P, E> as StorageBacking>::Key,
+    fn subscribe(
+        key: &<LayeredStorage<T, P, E> as StorageBacking<T>>::Key,
     ) -> Receiver<StorageChannelPayload> {
-        P::subscribe::<T>(key)
+        P::subscribe(key)
     }
 
-    fn unsubscribe(key: &<LayeredStorage<P, E> as StorageBacking>::Key) {
+    fn unsubscribe(key: &<LayeredStorage<T, P, E> as StorageBacking<T>>::Key) {
         P::unsubscribe(key)
     }
 }
 
 /// A trait for a subscriber to events from a storage backing
-pub trait StorageSubscriber<S: StorageBacking> {
+pub trait StorageSubscriber<T, S: StorageBacking<T>> {
     /// Subscribes to events from a storage backing for the given key
-    fn subscribe<T: DeserializeOwned + Send + Sync + Clone + 'static>(
-        key: &S::Key,
-    ) -> Receiver<StorageChannelPayload>;
+    fn subscribe(key: &S::Key) -> Receiver<StorageChannelPayload>;
     /// Unsubscribes from events from a storage backing for the given key
     fn unsubscribe(key: &S::Key);
 }
@@ -564,15 +577,12 @@ pub struct StorageSubscription {
 }
 
 impl StorageSubscription {
-    pub fn new<
-        S: StorageBacking + StorageSubscriber<S>,
-        T: DeserializeOwned + Send + Sync + Clone + 'static,
-    >(
+    pub fn new<S: StorageBacking<T> + StorageSubscriber<T, S>, T: Send + Sync + 'static>(
         tx: Sender<StorageChannelPayload>,
         key: S::Key,
     ) -> Self {
         let getter = move || {
-            let data = S::get::<T>(&key).unwrap();
+            let data = S::get(&key).unwrap();
             StorageChannelPayload::new(data)
         };
         Self {
@@ -589,16 +599,16 @@ impl StorageSubscription {
 }
 
 /// A payload for a storage channel that contains the latest value from storage.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct StorageChannelPayload {
-    data: Arc<dyn Any + Send + Sync>,
+    data: Box<dyn Any + Send + Sync>,
 }
 
 impl StorageChannelPayload {
     /// Creates a new StorageChannelPayload
     pub fn new<T: Send + Sync + 'static>(data: T) -> Self {
         Self {
-            data: Arc::new(data),
+            data: Box::new(data),
         }
     }
 
@@ -610,7 +620,7 @@ impl StorageChannelPayload {
 
 impl Default for StorageChannelPayload {
     fn default() -> Self {
-        Self { data: Arc::new(()) }
+        Self { data: Box::new(()) }
     }
 }
 
@@ -668,9 +678,8 @@ pub(crate) fn use_hydrate_storage<S, T>(
     init: Option<impl FnOnce() -> T>,
 ) -> Signal<T>
 where
-    S: StorageBacking,
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
-    S::Key: Clone,
+    S: StorageBacking<T>,
+    T: Clone + Send + Sync + PartialEq + 'static,
 {
     let mode = StorageMode::current();
     // We read the value from storage and store it here if we are hydrating the client.
@@ -703,28 +712,32 @@ where
 #[derive(Clone)]
 struct DefaultEncoder;
 
-impl StorageEncoder for DefaultEncoder {
+impl<T: Serialize + DeserializeOwned> StorageEncoder<T> for DefaultEncoder {
     type Value = String;
 
-    fn deserialize<T: DeserializeOwned + Clone + 'static>(loaded: &Self::Value) -> T {
+    fn deserialize(loaded: &Self::Value) -> T {
         // TODO: handle errors
         try_serde_from_string(loaded).unwrap()
     }
 
-    fn serialize<T: Serialize + Send + Sync + Clone + 'static>(value: &T) -> Self::Value {
+    fn serialize(value: &T) -> Self::Value {
         serde_to_string(value)
     }
 }
 
 /// StorageBacking using default encoder: handles LocalStorage and other built in storage implementations.
-impl<P: StoragePersistence<Value = Option<String>>> StorageBacking for P {
+impl<
+    T: Serialize + DeserializeOwned + Clone + 'static,
+    P: StoragePersistence<Value = Option<String>>,
+> StorageBacking<T> for P
+{
     type Key = P::Key;
 
-    fn get<T: DeserializeOwned + Clone + 'static>(key: &Self::Key) -> Option<T> {
-        LayeredStorage::<P, DefaultEncoder>::get(key)
+    fn get(key: &Self::Key) -> Option<T> {
+        LayeredStorage::<T, P, DefaultEncoder>::get(key)
     }
 
-    fn set<T: Serialize + Send + Sync + Clone + 'static>(key: Self::Key, value: &T) {
-        LayeredStorage::<P, DefaultEncoder>::set(key, value)
+    fn set(key: &Self::Key, value: &T) {
+        LayeredStorage::<T, P, DefaultEncoder>::set(key, value)
     }
 }

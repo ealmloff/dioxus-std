@@ -1,5 +1,6 @@
 use crate::{StorageChannelPayload, StorageSubscription};
 use dioxus::logger::tracing::trace;
+use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::io::Write;
@@ -72,13 +73,13 @@ impl StoragePersistence for LocalStorage {
         get(key)
     }
 
-    fn store(key: Self::Key, value: &Self::Value) {
-        set(&key, value);
+    fn store(key: &Self::Key, value: &Self::Value) {
+        set(key, value);
 
         // If the subscriptions map is not initialized, we don't need to notify any subscribers.
         if let Some(subscriptions) = SUBSCRIPTIONS.get() {
             let read_binding = subscriptions.read().unwrap();
-            if let Some(subscription) = read_binding.get(&key) {
+            if let Some(subscription) = read_binding.get(key) {
                 subscription
                     .tx
                     .send(StorageChannelPayload::new(value.clone()))
@@ -91,9 +92,11 @@ impl StoragePersistence for LocalStorage {
 // Note that this module contains an optimization that differs from the web version. Dioxus Desktop runs all windows in
 // the same thread, meaning that we can just directly notify the subscribers via the same channels, rather than using the
 // storage event listener.
-impl StorageSubscriber<LocalStorage> for LocalStorage {
-    fn subscribe<T: DeserializeOwned + Send + Sync + Clone + 'static>(
-        key: &<LocalStorage as StorageBacking>::Key,
+impl<T: Send + Sync + Serialize + DeserializeOwned + Clone + 'static>
+    StorageSubscriber<T, LocalStorage> for LocalStorage
+{
+    fn subscribe(
+        key: &<LocalStorage as StorageBacking<T>>::Key,
     ) -> Receiver<StorageChannelPayload> {
         // Initialize the subscriptions map if it hasn't been initialized yet.
         let subscriptions = SUBSCRIPTIONS.get_or_init(|| RwLock::new(HashMap::new()));
@@ -117,7 +120,7 @@ impl StorageSubscriber<LocalStorage> for LocalStorage {
         }
     }
 
-    fn unsubscribe(key: &<LocalStorage as StorageBacking>::Key) {
+    fn unsubscribe(key: &<LocalStorage as StorageBacking<T>>::Key) {
         trace!("Unsubscribing from \"{}\"", key);
 
         // Fail silently if unsubscribe is called but the subscriptions map isn't initialized yet.

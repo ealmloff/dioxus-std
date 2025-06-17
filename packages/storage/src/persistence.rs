@@ -2,16 +2,13 @@ use crate::SessionStorage;
 use crate::{new_storage_entry, use_hydrate_storage};
 use dioxus::prelude::*;
 use dioxus_signals::Signal;
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-
 use super::StorageEntryTrait;
 
 /// A persistent storage hook that can be used to store data across application reloads.
 ///
 /// Depending on the platform this uses either local storage or a file storage
 pub fn use_persistent<
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    T: Clone + Send + Sync + PartialEq + 'static,
 >(
     key: impl ToString,
     init: impl FnOnce() -> T,
@@ -26,7 +23,7 @@ pub fn use_persistent<
 ///
 /// Depending on the platform this uses either local storage or a file storage
 pub fn new_persistent<
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    T: Clone + Send + Sync + PartialEq + 'static,
 >(
     key: impl ToString,
     init: impl FnOnce() -> T,
@@ -42,7 +39,7 @@ pub fn new_persistent<
 /// Depending on the platform this uses either local storage or a file storage
 #[track_caller]
 pub fn use_singleton_persistent<
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    T: Clone + Send + Sync + PartialEq + 'static,
 >(
     init: impl FnOnce() -> T,
 ) -> Signal<T> {
@@ -59,7 +56,7 @@ pub fn use_singleton_persistent<
 #[allow(clippy::needless_return)]
 #[track_caller]
 pub fn new_singleton_persistent<
-    T: Serialize + DeserializeOwned + Clone + Send + Sync + PartialEq + 'static,
+    T: Clone + Send + Sync + PartialEq + 'static,
 >(
     init: impl FnOnce() -> T,
 ) -> Signal<T> {
